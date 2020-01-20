@@ -60,6 +60,7 @@
 #     - PLATFORMIO_CI_SRC=path/to/test/directory
 #
 # install:
-pip3 install -U platformio
-platformio update
-platformio run
+language: python
+- pip3 install -U platformio
+- platformio update
+- platformio run
