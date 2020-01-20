@@ -61,6 +61,7 @@
 #
 # install:
 language: python
-- pip3 install -U platformio
-- platformio update
-- platformio run
+script:
+  - pip3 install -U platformio
+  - platformio update
+  - platformio run
