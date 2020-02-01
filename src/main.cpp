@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include "WiFi.h"
-#include "esp_wps.h"
 /*
 Change the definition of the WPS mode
 from WPS_TYPE_PBC to WPS_TYPE_PIN in
@@ -13,82 +11,179 @@ WPS
 #define ESP_MODEL_NAME    "ESPRESSIF IOT"
 #define ESP_DEVICE_NAME   "ESP STATION"
 
-static esp_wps_config_t config;
+#ifdef ESP32
+  #include <esp_wifi.h>
+  #include <WiFi.h>
+  #include <WiFiClient.h>
 
-void wpsInitConfig(){
-  config.crypto_funcs = &g_wifi_default_wps_crypto_funcs;
-  config.wps_type = ESP_WPS_MODE;
-  strcpy(config.factory_info.manufacturer, ESP_MANUFACTURER);
-  strcpy(config.factory_info.model_number, ESP_MODEL_NUMBER);
-  strcpy(config.factory_info.model_name, ESP_MODEL_NAME);
-  strcpy(config.factory_info.device_name, ESP_DEVICE_NAME);
-}
+  #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
 
-String wpspin2string(uint8_t a[]){
-  char wps_pin[9];
-  for(int i=0;i<8;i++){
-    wps_pin[i] = a[i];
+  #define LED_ON      HIGH
+  #define LED_OFF     LOW  
+#else
+  #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
+  //needed for library
+  #include <DNSServer.h>
+  #include <ESP8266WebServer.h>  
+
+  #define ESP_getChipId()   (ESP.getChipId())
+
+  #define LED_ON      LOW
+  #define LED_OFF     HIGH
+#endif
+
+// SSID and PW for Config Portal
+String ssid = "ESP_" + String(ESP_getChipId(), HEX);
+const char* password = "your_password";
+
+// SSID and PW for your Router
+String Router_SSID;
+String Router_Pass;
+
+// Use false if you don't like to display Available Pages in Information Page of Config Portal
+// Comment out or use true to display Available Pages in Information Page of Config Portal
+// Must be placed before #include <ESP_WiFiManager.h> 
+#define USE_AVAILABLE_PAGES     false
+
+#include <ESP_WiFiManager.h>              //https://github.com/khoih-prog/ESP_WiFiManager
+
+// Onboard LED I/O pin on NodeMCU board
+const int PIN_LED = 2; // D4 on NodeMCU and WeMos. GPIO2/ADC12 of ESP32. Controls the onboard LED.
+
+void heartBeatPrint(void)
+{
+  static int num = 1;
+
+  if (WiFi.status() == WL_CONNECTED)
+    Serial.print("H");        // H means connected to WiFi
+  else
+    Serial.print("F");        // F means not connected to WiFi
+  
+  if (num == 80) 
+  {
+    Serial.println();
+    num = 1;
   }
-  wps_pin[8] = '\0';
-  return (String)wps_pin;
-}
+  else if (num++ % 10 == 0) 
+  {
+    Serial.print(" ");
+  }
+} 
 
-void WiFiEvent(WiFiEvent_t event, system_event_info_t info){
-  switch(event){
-    case SYSTEM_EVENT_STA_START:
-      Serial.println("Station Mode Started");
-      break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-      Serial.println("Connected to :" + String(WiFi.SSID()));
-      Serial.print("Got IP: ");
-      Serial.println(WiFi.localIP());
-      break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-      Serial.println("Disconnected from station, attempting reconnection");
-      WiFi.reconnect();
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
-      Serial.println("WPS Successfull, stopping WPS and connecting to: " + String(WiFi.SSID()));
-      esp_wifi_wps_disable();
-      delay(10);
-      WiFi.begin();
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
-      Serial.println("WPS Failed, retrying");
-      esp_wifi_wps_disable();
-      esp_wifi_wps_enable(&config);
-      esp_wifi_wps_start(0);
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
-      Serial.println("WPS Timedout, retrying");
-      esp_wifi_wps_disable();
-      esp_wifi_wps_enable(&config);
-      esp_wifi_wps_start(0);
-      break;
-    case SYSTEM_EVENT_STA_WPS_ER_PIN:
-      Serial.println("WPS_PIN = " + wpspin2string(info.sta_er_pin.pin_code));
-      break;
-    default:
-      break;
+void check_status()
+{
+  static ulong checkstatus_timeout = 0;
+
+  //KH
+  #define HEARTBEAT_INTERVAL    10000L
+  // Print hearbeat every HEARTBEAT_INTERVAL (10) seconds.
+  if ((millis() > checkstatus_timeout) || (checkstatus_timeout == 0))
+  {
+    heartBeatPrint();
+    checkstatus_timeout = millis() + HEARTBEAT_INTERVAL;
   }
 }
 
-void setup(){
+void setup() 
+{
+  // put your setup code here, to run once:
+  // initialize the LED digital pin as an output.
+  pinMode(PIN_LED, OUTPUT);
   Serial.begin(115200);
-  delay(10);
+  Serial.println("\nStarting");
+  
+  unsigned long startedAt = millis();
+  
+  digitalWrite(PIN_LED, LED_ON); // turn the LED on by making the voltage LOW to tell us we are in configuration mode.
+  
+  //Local intialization. Once its business is done, there is no need to keep it around
+  // Use this to default DHCP hostname to ESP8266-XXXXXX or ESP32-XXXXXX
+  ESP_WiFiManager ESP_wifiManager;
+  // Use this to personalize DHCP hostname (RFC952 conformed)
+  //ESP_WiFiManager ESP_wifiManager("ConfigOnStartup");
+  
+  ESP_wifiManager.setMinimumSignalQuality(-1);
+  // Set static IP, Gateway, Subnetmask, DNS1 and DNS2. New in v1.0.5
+  ESP_wifiManager.setSTAStaticIPConfig(IPAddress(192,168,2,114), IPAddress(192,168,2,1), IPAddress(255,255,255,0), 
+                                        IPAddress(192,168,2,1), IPAddress(8,8,8,8));
 
-  Serial.println();
+  // We can't use WiFi.SSID() in ESP32as it's only valid after connected. 
+  // SSID and Password stored in ESP32 wifi_ap_record_t and wifi_config_t are also cleared in reboot
+  // Have to create a new function to store in EEPROM/SPIFFS for this purpose
+  Router_SSID = ESP_wifiManager.WiFi_SSID();
+  Router_Pass = ESP_wifiManager.WiFi_Pass();
+  
+  //Remove this line if you do not want to see WiFi password printed
+  Serial.println("Stored: SSID = " + Router_SSID + ", Pass = " + Router_Pass);
+  
+  //Check if there is stored WiFi router/password credentials.
+  //If not found, device will remain in configuration mode until switched off via webserver.
+  Serial.print("Opening configuration portal.");
+  
+  if (Router_SSID != "")
+  {
+    ESP_wifiManager.setConfigPortalTimeout(60); //If no access point name has been previously entered disable timeout.
+    Serial.println("Timeout 60s");
+  }
+  else
+    Serial.println("No timeout");
 
-  WiFi.onEvent(WiFiEvent);
-  WiFi.mode(WIFI_MODE_STA);
+  // SSID to uppercase 
+  ssid.toUpperCase();  
 
-  Serial.println("Starting WPS");
+  //it starts an access point 
+  //and goes into a blocking loop awaiting configuration
+  if (!ESP_wifiManager.startConfigPortal((const char *) ssid.c_str(), password)) 
+    Serial.println("Not connected to WiFi but continuing anyway.");
+  else 
+    Serial.println("WiFi connected...yeey :)");
 
-  wpsInitConfig();
-  esp_wifi_wps_enable(&config);
-  esp_wifi_wps_start(0);
+  digitalWrite(PIN_LED, LED_OFF); // Turn led off as we are not in configuration mode.
+ 
+  // For some unknown reason webserver can only be started once per boot up 
+  // so webserver can not be used again in the sketch.
+  #define WIFI_CONNECT_TIMEOUT        30000L
+  #define WHILE_LOOP_DELAY            200L
+  #define WHILE_LOOP_STEPS            (WIFI_CONNECT_TIMEOUT / ( 3 * WHILE_LOOP_DELAY ))
+  
+  startedAt = millis();
+  
+  while ( (WiFi.status() != WL_CONNECTED) && (millis() - startedAt < WIFI_CONNECT_TIMEOUT ) )
+  {   
+    #ifdef ESP32
+      WiFi.mode(WIFI_STA);
+      WiFi.persistent (true);
+      // We start by connecting to a WiFi network
+    
+      Serial.print("Connecting to ");
+      Serial.println(Router_SSID);
+    
+      WiFi.begin(Router_SSID.c_str(), Router_Pass.c_str());
+    #endif
+
+    int i = 0;
+    while((!WiFi.status() || WiFi.status() >= WL_DISCONNECTED) && i++ < WHILE_LOOP_STEPS)
+    {
+      delay(WHILE_LOOP_DELAY);
+    }    
+  }
+
+  Serial.print("After waiting ");
+  Serial.print((millis()- startedAt) / 1000);
+  Serial.print(" secs more in setup(), connection result is ");
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.print("connected. Local IP: ");
+    Serial.println(WiFi.localIP());
+  }
+  //else
+  //  Serial.println(ESP_wifiManager.getStatus(WiFi.status()));
 }
 
-void loop(){
-  //nothing to do here
+
+void loop() 
+{
+  // put your main code here, to run repeatedly
+  check_status();
 }
