@@ -11,29 +11,15 @@ WPS
 #define ESP_MODEL_NAME    "ESPRESSIF IOT"
 #define ESP_DEVICE_NAME   "ESP STATION"
 
-#ifdef ESP32
-  #include <esp_wifi.h>
-  #include <WiFi.h>
-  #include <WiFiClient.h>
+#include <esp_wifi.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
 
-  #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
-
-  #define LED_ON      HIGH
-  #define LED_OFF     LOW  
-#else
-  #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
-  //needed for library
-  #include <DNSServer.h>
-  #include <ESP8266WebServer.h>  
-
-  #define ESP_getChipId()   (ESP.getChipId())
-
-  #define LED_ON      LOW
-  #define LED_OFF     HIGH
-#endif
+#define LED_ON      HIGH
+#define LED_OFF     LOW  
 
 // SSID and PW for Config Portal
-String ssid = "ESP_" + String(ESP_getChipId(), HEX);
+String ssid = "ESP_XXX";
 const char* password = "your_password";
 
 // SSID and PW for your Router
@@ -104,22 +90,13 @@ void setup()
   
   ESP_wifiManager.setMinimumSignalQuality(-1);
   // Set static IP, Gateway, Subnetmask, DNS1 and DNS2. New in v1.0.5
-  ESP_wifiManager.setSTAStaticIPConfig(IPAddress(192,168,2,114), IPAddress(192,168,2,1), IPAddress(255,255,255,0), 
-                                        IPAddress(192,168,2,1), IPAddress(8,8,8,8));
-
+  
   // We can't use WiFi.SSID() in ESP32as it's only valid after connected. 
   // SSID and Password stored in ESP32 wifi_ap_record_t and wifi_config_t are also cleared in reboot
   // Have to create a new function to store in EEPROM/SPIFFS for this purpose
   Router_SSID = ESP_wifiManager.WiFi_SSID();
   Router_Pass = ESP_wifiManager.WiFi_Pass();
-  
-  //Remove this line if you do not want to see WiFi password printed
-  Serial.println("Stored: SSID = " + Router_SSID + ", Pass = " + Router_Pass);
-  
-  //Check if there is stored WiFi router/password credentials.
-  //If not found, device will remain in configuration mode until switched off via webserver.
-  Serial.print("Opening configuration portal.");
-  
+     
   if (Router_SSID != "")
   {
     ESP_wifiManager.setConfigPortalTimeout(60); //If no access point name has been previously entered disable timeout.
