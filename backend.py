@@ -6,7 +6,7 @@ def insert_data(value):
     try:
         conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST, password=DB_PASS, port=5432)
     except ConnectionError:
-        return print("Unable to connectv to database")
+        return print("Unable to connect to database")
     cur = conn.cursor()
     cur.execute('INSERT INTO temperature (temp) VALUES(%s)', (float(value), ))
     conn.commit()
