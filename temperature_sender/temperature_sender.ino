@@ -18,9 +18,9 @@ void setup() {
 void loop() {
  if(WiFi.status()== WL_CONNECTED){
    HTTPClient http;
-   http.begin("https://ceri.marcoaceti.it/");
+   http.begin(""); //insert domain and path orip address and path
    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-   String request = "value=34.6";
+   String request = ""; //sensor output
    int code = http.POST(request);
  
    if(code > 0){
