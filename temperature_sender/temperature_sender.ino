@@ -1,8 +1,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
  
-const char* ssid = "HUAWEI P9 lite";
-const char* password =  "123456789";
+const char* ssid = "";
+const char* password =  "";
 
 void setup() {
   Serial.begin(115200);
