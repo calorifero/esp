@@ -4,18 +4,12 @@ from config import *
 
 def insert_data(value):
     try:
-        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST, password=DB_PASS)
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST, password=DB_PASS, port=5432)
     except ConnectionError:
-        return print("Unable to connect to database")
-
+        return print("Unable to connectv to database")
     cur = conn.cursor()
-    sql = "INSERT INTO temperature (temp) VALUES (" + value + ");"
-    try:
-        cur.execute(TABLE, conn)
-        cur.execute(sql, conn)
-    except:
-        print("Query failed")
-
+    cur.execute('INSERT INTO temperature (temp) VALUES(%s)', (float(value), ))
+    conn.commit()
     cur.close()
     conn.close()
     conn = None
